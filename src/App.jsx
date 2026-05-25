@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { loadProgress, saveProgress } from "./lib/progressStorage";
 
 // ================================================================
 // COUNTRY DATA — all ~104 GeoGuessr countries
@@ -196,22 +197,13 @@ const MODES = [
 ];
 
 // ================================================================
-// STORAGE HELPERS
-// ================================================================
-async function loadStorage(key) {
-  try { const r = await window.storage.get(key); return r ? JSON.parse(r.value) : null; } catch { return null; }
-}
-async function saveStorage(key, val) {
-  try { await window.storage.set(key, JSON.stringify(val)); } catch {}
-}
-
-// ================================================================
 // MAIN APP
 // ================================================================
 export default function App() {
   const [screen, setScreen] = useState("loading");
   const [cards, setCards] = useState({});
-  const [gstats, setGstats] = useState({ streak: 0, lastStudy: null, totalSessions: 0, totalCorrect: 0, totalReviewed: 0 });
+  const DEFAULT_STATS = { streak: 0, lastStudy: null, totalSessions: 0, totalCorrect: 0, totalReviewed: 0 };
+  const [gstats, setGstats] = useState(DEFAULT_STATS);
   const [mode, setMode] = useState("flag");
   const [region, setRegion] = useState("All");
   const [session, setSession] = useState([]);
@@ -222,20 +214,35 @@ export default function App() {
   const [sessStats, setSessStats] = useState({ correct: 0, total: 0 });
   const [tab, setTab] = useState("home"); // home | stats
   const ref1 = useRef(), ref2 = useRef();
+  const cardsRef = useRef({});
+  const statsRef = useRef(DEFAULT_STATS);
 
   // Load
   useEffect(() => {
     (async () => {
-      const c = await loadStorage("gg2-cards");
-      const s = await loadStorage("gg2-stats");
-      if (c) setCards(c);
-      if (s) setGstats(s);
+      const progress = await loadProgress();
+      const loadedCards = progress?.cards || {};
+      const loadedStats = progress?.stats || DEFAULT_STATS;
+
+      cardsRef.current = loadedCards;
+      statsRef.current = loadedStats;
+      setCards(loadedCards);
+      setGstats(loadedStats);
       setScreen("home");
     })();
   }, []);
 
-  const persistCards = useCallback(async (c) => { setCards(c); await saveStorage("gg2-cards", c); }, []);
-  const persistStats = useCallback(async (s) => { setGstats(s); await saveStorage("gg2-stats", s); }, []);
+  const persistCards = useCallback((nextCards) => {
+    cardsRef.current = nextCards;
+    setCards(nextCards);
+    void saveProgress({ cards: nextCards, stats: statsRef.current });
+  }, []);
+
+  const persistStats = useCallback((nextStats) => {
+    statsRef.current = nextStats;
+    setGstats(nextStats);
+    void saveProgress({ cards: cardsRef.current, stats: nextStats });
+  }, []);
 
   function cardKey(tld) { return `${tld}-${mode}`; }
   function getCard(tld) { return cards[cardKey(tld)] || createCard(tld); }
@@ -312,7 +319,7 @@ export default function App() {
       totalReviews: (card.totalReviews || 0) + 1,
       correctReviews: (card.correctReviews || 0) + (correct ? 1 : 0),
     }, quality);
-    persistCards({ ...cards, [cardKey(country.tld)]: updated });
+    persistCards({ ...cardsRef.current, [cardKey(country.tld)]: updated });
     setSessStats(p => ({ correct: p.correct + (correct ? 1 : 0), total: p.total + 1 }));
     setFb({ correct, country, nameOk, tldOk });
   }
