@@ -193,7 +193,7 @@ const REGION_FLAGS = { All: "🌍", Africa: "🌍", Asia: "🌏", Europe: "🌎"
 const MODES = [
   { id: "flag",  icon: "🚩", label: "Flagi",   desc: "Widzisz flagę → wpisujesz nazwę kraju" },
   { id: "tld",   icon: "🌐", label: "Domeny",  desc: "Widzisz sufiks (.xx) → wpisujesz nazwę kraju" },
-  { id: "mixed", icon: "🎯", label: "Mieszany", desc: "Widzisz flagę → wpisujesz nazwę ORAZ sufiks" },
+  { id: "mixed", icon: "🎯", label: "Flaga z domeną", desc: "Widzisz flagę i sufiks — wpisujesz nazwę kraju. Sufiks pomaga w rozpoznaniu flagi." },
 ];
 
 // ================================================================
@@ -209,11 +209,10 @@ export default function App() {
   const [session, setSession] = useState([]);
   const [idx, setIdx] = useState(0);
   const [ans1, setAns1] = useState("");
-  const [ans2, setAns2] = useState("");
   const [fb, setFb] = useState(null); // feedback
   const [sessStats, setSessStats] = useState({ correct: 0, total: 0 });
   const [tab, setTab] = useState("home"); // home | stats
-  const ref1 = useRef(), ref2 = useRef();
+  const ref1 = useRef();
   const cardsRef = useRef({});
   const statsRef = useRef(DEFAULT_STATS);
 
@@ -270,7 +269,7 @@ export default function App() {
     if (!due.length) return;
     setSession(due);
     setIdx(0);
-    setAns1(""); setAns2("");
+    setAns1("");
     setFb(null);
     setSessStats({ correct: 0, total: 0 });
     setScreen("study");
@@ -293,7 +292,7 @@ export default function App() {
         setScreen("result");
       } else {
         setIdx(i => i + 1);
-        setAns1(""); setAns2("");
+        setAns1("");
         setFb(null);
         setTimeout(() => ref1.current?.focus(), 50);
       }
@@ -301,16 +300,8 @@ export default function App() {
     }
 
     const country = session[idx];
-    let nameOk = false, tldOk = false, correct = false;
-
-    if (mode === "flag" || mode === "tld") {
-      nameOk = checkName(ans1, country);
-      correct = nameOk;
-    } else {
-      nameOk = checkName(ans1, country);
-      tldOk = checkTld(ans2, country);
-      correct = nameOk && tldOk;
-    }
+    const nameOk = checkName(ans1, country);
+    const correct = nameOk;
 
     const quality = correct ? 4 : 1;
     const card = getCard(country.tld);
@@ -321,16 +312,12 @@ export default function App() {
     }, quality);
     persistCards({ ...cardsRef.current, [cardKey(country.tld)]: updated });
     setSessStats(p => ({ correct: p.correct + (correct ? 1 : 0), total: p.total + 1 }));
-    setFb({ correct, country, nameOk, tldOk });
+    setFb({ correct, country, nameOk });
   }
 
   function onKey1(e) {
-    if (e.key === "Enter") {
-      if (mode === "mixed" && !fb && ans1.trim()) ref2.current?.focus();
-      else submitAnswer();
-    }
+    if (e.key === "Enter") submitAnswer();
   }
-  function onKey2(e) { if (e.key === "Enter") submitAnswer(); }
 
   const due = dueList();
   const country = session[idx];
@@ -401,33 +388,12 @@ export default function App() {
                   value={ans1}
                   onChange={e => !fb && setAns1(e.target.value)}
                   onKeyDown={onKey1}
-                  placeholder={mode === "tld" ? "np. Polska, Poland..." : "np. Polska, Poland..."}
+                  placeholder="np. Polska, Poland..."
                   autoComplete="off"
                   spellCheck={false}
                   readOnly={!!fb}
                 />
               </div>
-
-              {mode === "mixed" && (
-                <div style={S.inputGroup}>
-                  <label style={S.inputLabel}>Sufiks domeny (np. .pl)</label>
-                  <input
-                    ref={ref2}
-                    style={{
-                      ...S.input,
-                      borderColor: fb ? (fb.tldOk ? "#22c55e" : "#ef4444") : "#475569",
-                      background: fb ? (fb.tldOk ? "#052e16" : "#2d0707") : "#0f172a",
-                    }}
-                    value={ans2}
-                    onChange={e => !fb && setAns2(e.target.value)}
-                    onKeyDown={onKey2}
-                    placeholder=".xx"
-                    autoComplete="off"
-                    spellCheck={false}
-                    readOnly={!!fb}
-                  />
-                </div>
-              )}
             </div>
 
             {/* Feedback */}
@@ -439,12 +405,6 @@ export default function App() {
                   {" · "}<span style={{ color: "#7dd3fc" }}>PL: {country.pl}</span>
                   {" · "}<span style={{ color: "#fbbf24" }}>.{country.tld}</span>
                 </div>
-                {!fb.correct && mode === "mixed" && (
-                  <div style={{ marginTop: 4, fontSize: 12, color: "#94a3b8" }}>
-                    {!fb.nameOk && <span style={{ color: "#fca5a5" }}>Nazwa: nieprawidłowa  </span>}
-                    {!fb.tldOk && <span style={{ color: "#fca5a5" }}>Sufiks: nieprawidłowy</span>}
-                  </div>
-                )}
                 <div style={{ marginTop: 8, fontSize: 12, color: "#64748b" }}>
                   {fb.correct
                     ? `Następna powtórka za ${getCard(country.tld).interval} dni`
